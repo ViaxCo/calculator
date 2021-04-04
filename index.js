@@ -6,6 +6,7 @@ const result = document.querySelector("span");
 //   Result font size
 const fontSize = window.getComputedStyle(result).fontSize; // or max font size
 
+// Calculator state
 let firstValue;
 let previousKeyType;
 let lastOperator;
@@ -16,121 +17,11 @@ keys.addEventListener("click", e => {
   if (!(e.target instanceof HTMLButtonElement)) return;
 
   const key = e.target;
-  const operator = key.dataset.operator;
-  const action = key.dataset.action;
   const displayedNumber = result.textContent;
 
-  // If any number key was pressed
-  if (!operator && !action) {
-    const number = key.textContent;
-    clearButton.textContent = "C";
-    if (
-      displayedNumber === "0" ||
-      previousKeyType === "operator" ||
-      previousKeyType === "equals" ||
-      previousKeyType === "percent"
-    ) {
-      result.textContent = number;
-    } else {
-      result.textContent += number;
-    }
-  }
-
-  // Blink display when action or operator key is pressed
-  if ((action && action !== "decimal") || operator) {
-    blinkResult();
-  }
-
-  // If any operator key was pressed
-  if (operator) {
-    if (
-      firstValue &&
-      lastOperator &&
-      previousKeyType !== "operator" &&
-      previousKeyType !== "equals" &&
-      previousKeyType !== "plus-minus"
-    ) {
-      result.textContent = calculate(firstValue, lastOperator, displayedNumber);
-    }
-    firstValue = result.textContent;
-    lastOperator = operator;
-  }
-
-  // If any action key was pressed
-  switch (action) {
-    case "decimal": {
-      if (!displayedNumber.includes(".")) {
-        clearButton.textContent = "C";
-        result.textContent += ".";
-      }
-      if (
-        previousKeyType === "operator" ||
-        previousKeyType === "equals" ||
-        previousKeyType === "percent"
-      ) {
-        result.textContent = "0.";
-      }
-      break;
-    }
-    case "plus-minus": {
-      if (displayedNumber === "0") break;
-      if (displayedNumber.includes("-")) {
-        const res = displayedNumber.split("-");
-        result.textContent = res[res.length - 1];
-        break;
-      }
-      result.textContent = `-${displayedNumber}`;
-      break;
-    }
-    case "percent": {
-      result.textContent = (parseFloat(displayedNumber) / 100).toString();
-      if (firstValue && lastOperator) {
-        result.textContent = (
-          (parseFloat(displayedNumber) / 100) *
-          parseFloat(firstValue)
-        ).toString();
-      }
-      if (displayedNumber.includes("e")) {
-        result.style.fontSize = fontSize;
-      }
-      break;
-    }
-    case "equals": {
-      let secondValue = displayedNumber;
-      if (firstValue && lastOperator) {
-        if (previousKeyType === "equals") {
-          firstValue = displayedNumber;
-          secondValue = lastNumber;
-        }
-        result.textContent = calculate(firstValue, lastOperator, secondValue);
-        lastNumber = secondValue;
-      }
-      break;
-    }
-    case "clear": {
-      result.textContent = "0";
-      result.style.fontSize = fontSize;
-      clearButton.textContent = "AC";
-      firstValue = undefined;
-      lastOperator = undefined;
-      lastNumber = undefined;
-      break;
-    }
-
-    default:
-      break;
-  }
-
-  if (action) {
-    if (action === "plus-minus" && previousKeyType === "equals") return;
-    previousKeyType = action;
-  }
-  if (operator) {
-    previousKeyType = "operator";
-  }
-  if (!action && !operator) {
-    previousKeyType = "number";
-  }
+  updateVisuals(key, displayedNumber);
+  result.textContent = createResult(key, displayedNumber).toString();
+  updateState(key, displayedNumber);
 
   // Reduce display font size when it gets filled up
   let currentSize;
@@ -151,6 +42,139 @@ const blinkResult = () => {
 };
 
 /**
+ * Get key type
+ * @param {HTMLButtonElement} key
+ */
+const getKeyType = key => {
+  const { action, operator } = key.dataset;
+  if (!action && !operator) return "number";
+  if (operator) return "operator";
+  return action;
+};
+
+/**
+ * Update the effects from pressing a key
+ * @param {HTMLButtonElement} key
+ * @param {string} displayedNumber
+ */
+const updateVisuals = (key, displayedNumber) => {
+  const { action, operator } = key.dataset;
+  const keyType = getKeyType(key);
+  if (keyType === "number" || keyType === "decimal") clearButton.textContent = "C";
+  if (keyType === "percent") {
+    if (displayedNumber.includes("e")) result.style.fontSize = fontSize;
+  }
+  if (keyType === "clear") {
+    result.style.fontSize = fontSize;
+    clearButton.textContent = "AC";
+  }
+  // Blink display when action or operator key is pressed
+  if ((action && action !== "decimal") || operator) {
+    blinkResult();
+  }
+};
+
+/**
+ * Create result string
+ * @param {HTMLButtonElement} key
+ * @param {string} displayedNumber
+ * @returns
+ */
+const createResult = (key, displayedNumber) => {
+  const keyType = getKeyType(key);
+
+  // If any number key was pressed
+  if (keyType === "number") {
+    const number = key.textContent;
+    return displayedNumber === "0" ||
+      previousKeyType === "operator" ||
+      previousKeyType === "equals" ||
+      previousKeyType === "percent"
+      ? number
+      : displayedNumber + number;
+  }
+
+  // If any operator key was pressed
+  if (keyType === "operator") {
+    return firstValue &&
+      lastOperator &&
+      previousKeyType !== "operator" &&
+      previousKeyType !== "equals" &&
+      previousKeyType !== "plus-minus"
+      ? calculate(firstValue, lastOperator, displayedNumber)
+      : displayedNumber;
+  }
+
+  // If decimal key was pressed
+  if (keyType === "decimal") {
+    if (!displayedNumber.includes(".")) return displayedNumber + ".";
+    if (
+      previousKeyType === "operator" ||
+      previousKeyType === "equals" ||
+      previousKeyType === "percent"
+    )
+      return "0.";
+  }
+
+  // If plus-minus key was pressed
+  if (keyType === "plus-minus") {
+    if (displayedNumber === "0") return;
+    if (displayedNumber.includes("-")) {
+      const res = displayedNumber.split("-");
+      return res[res.length - 1];
+    }
+    return `-${displayedNumber}`;
+  }
+
+  // If percent key was pressed
+  if (keyType === "percent") {
+    const n1 = parseFloat(firstValue);
+    const n2 = parseFloat(displayedNumber);
+    if (firstValue && lastOperator) return (n2 / 100) * n1;
+    return n2 / 100;
+  }
+
+  // If clear key was pressed
+  if (keyType === "clear") return "0";
+
+  // If equals key was pressed
+  if (keyType === "equals") {
+    return firstValue && lastOperator
+      ? previousKeyType === "equals"
+        ? calculate(displayedNumber, lastOperator, lastNumber)
+        : calculate(firstValue, lastOperator, displayedNumber)
+      : displayedNumber;
+  }
+};
+
+/**
+ * Update calculator state
+ * @param {HTMLButtonElement} key
+ * @param {string} displayedNumber
+ */
+const updateState = (key, displayedNumber) => {
+  const { operator } = key.dataset;
+  const keyType = getKeyType(key);
+  if (keyType === "plus-minus" && previousKeyType === "equals") return;
+  if (keyType === "operator") {
+    firstValue = displayedNumber;
+    lastOperator = operator;
+  }
+  if (keyType === "clear") {
+    firstValue = undefined;
+    lastOperator = undefined;
+    lastNumber = undefined;
+  }
+  if (keyType === "equals") {
+    lastNumber =
+      firstValue && lastOperator && previousKeyType === "equals"
+        ? lastNumber
+        : displayedNumber;
+  }
+  previousKeyType = keyType;
+};
+
+/**
  * Calculate final result
  * @param {string} firstValue
  * @param {string} operator
@@ -159,23 +183,9 @@ const blinkResult = () => {
 const calculate = (firstValue, operator, secondValue) => {
   const n1 = parseFloat(firstValue);
   const n2 = parseFloat(secondValue);
-  let result;
-  switch (operator) {
-    case "add":
-      result = n1 + n2;
-      break;
-    case "subtract":
-      result = n1 - n2;
-      break;
-    case "multiply":
-      result = n1 * n2;
-      break;
-    case "divide":
-      result = n1 / n2;
-      break;
-
-    default:
-      break;
-  }
-  return result.toString();
+  // let result;
+  if (operator === "add") return n1 + n2;
+  if (operator === "subtract") return n1 - n2;
+  if (operator === "multiply") return n1 * n2;
+  if (operator === "divide") return n1 / n2;
 };
