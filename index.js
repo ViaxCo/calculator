@@ -122,6 +122,7 @@ keys.addEventListener("click", e => {
   }
 
   if (action) {
+    if (action === "plus-minus" && previousKeyType === "equals") return;
     previousKeyType = action;
   }
   if (operator) {
